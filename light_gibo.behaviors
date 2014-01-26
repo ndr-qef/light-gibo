@@ -1,0 +1,2 @@
+{:+ {:app [(:lt.objs.plugins/load-js "light_gibo_compiled.js" true)]
+     :light-gibo.hello [:lt.plugins.light-gibo/on-close-destroy]}}
