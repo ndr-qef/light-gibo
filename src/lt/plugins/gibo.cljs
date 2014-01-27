@@ -12,7 +12,8 @@
             [clojure.string          :as string])
   (:require-macros [lt.macros :refer [behavior]]))
 
-(def path           (js/require "path"))
+(def path (js/require "path"))
+(def nfs  (js/require "fs"))
 
 (def gh-default (fs/join (fs/home) ".gitignore-boilerplates"))
 (def gh-remote "https://github.com/github/gitignore.git")
@@ -41,6 +42,18 @@
 (defn gh-local [r]
   (peek (:gh-local @r)))
 
+(defn append [path content & [cb]]
+  (try
+    (.appendFileSync nfs path content)
+    (object/raise fs/files-obj :files.save path)
+    (when cb (cb))
+    (catch js/global.Error e
+      (object/raise fs/files-obj :files.save.error path e)
+      (when cb (cb e)))
+    (catch js/Error e
+      (object/raise fs/files-obj :files.save.error path e)
+      (when cb (cb e)))))
+
 
 ;;;; gibos reading and processing ;;;;
 
@@ -55,12 +68,12 @@
        coll))
 
 (defn ->content [coll]
-  (str "## " (:name coll) " ##\n\n"
-       (fs/bomless-read (:file coll))
-       "\n\n"))
+  (str "## " (:name coll)
+       " ##\n\n"
+       (fs/bomless-read (:file coll))))
 
 (defn gitignore<- [coll]
-  (string/join (map #(->content %) coll)))
+  (string/join (interpose "\n\n" (map #(->content %) coll))))
 
 
 ;;;; git processes and notifications ;;;;
@@ -171,8 +184,11 @@
                       (if-let [p (pwd)]
                         (do
                           (notifos/working "Saving gibos…")
-                          (fs/save (gitignore-at p)
-                                   content (note-write p))
+                          (append (gitignore-at p)
+                                  (if (fs/exists? (gitignore-at p))
+                                    (str "\n\n" content)
+                                    content)
+                                  (note-write p))
                           (object/update! this [:bos] empty)
                           (scmd/exec! :close-sidebar)
                           (object/raise gibo-list :escape! false))
