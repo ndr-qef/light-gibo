@@ -91,14 +91,13 @@
 (behavior ::on-out
           :triggers #{:proc.out}
           :reaction (fn[this data]
-                      (let [out (.toString data)]
-                        (do
-                          (js/console.log out)))))
+                      (let [out (str data)]
+                          (js/console.log out))))
 
 (behavior ::on-exit
           :triggers #{:proc.exit}
           :reaction (fn [this data]
-                      (let [out (.toString data)]
+                      (let [out (str data)]
                         (case out
                           "0" (do (notifos/done-working "Git operation successful.")
                                   (object/raise gibo-list :force-refresh!))
@@ -109,7 +108,7 @@
 (behavior ::on-error
           :triggers #{:proc.error}
           :reaction (fn [this data]
-                      (let [out (.toString data)]
+                      (let [out (str data)]
                         (notifos/done-working "Git encountered an error; see console for details.")
                         (js/console.log out))))
 
