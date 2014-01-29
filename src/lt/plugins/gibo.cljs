@@ -114,16 +114,20 @@
                         (case out
                           "0" (do (notifos/done-working "Git operation successful.")
                                   (object/raise gibo-list :force-refresh!))
-                          "1" (notifos/done-working "Git operation failed with exit code 1.")
-                          (do (notifos/done-working "Git operation failed; see console for details.")
-                              (js/console.log (str "Git exit code: " out)))))))
+                          "1" (do (notifos/done-working)
+                                  (notifos/set-msg! "Git operation failed with exit code 1." {:class "error"}))
+                          (do (notifos/done-working)
+                              (notifos/set-msg! "Git operation failed; see console for details." {:class "error"})
+                              (.error js/console (str "Git exit code: " out)))))))
 
 (behavior ::on-error
           :triggers #{:proc.error}
           :reaction (fn [this data]
                       (let [out (str data)]
-                        (notifos/done-working "Git encountered an error; see console for details.")
-                        (js/console.log out))))
+                        (do
+                          (notifos/done-working)
+                          (notifos/set-msg! "Git encountered an error; see console for details.")
+                          (js/console.log out)))))
 
 
 ;;;; repository manager ;;;;
@@ -255,9 +259,9 @@
 (behavior ::refresh
           :triggers #{:force-refresh!}
           :reaction (fn [this]
-                      (notifos/set-msg! "Gitignore boilerplates refreshed.")
-                      (object/update! this [:items] #(conj (->bo (local-bos (gh-local repo))) writer reviewer))
-                      (object/raise this :refresh!)))
+                      (do
+                        (object/update! this [:items] conj (conj (->bo (local-bos (gh-local repo))) writer reviewer))
+                        (object/raise this :refresh!))))
 
 
 ;;;; user-reachable commands ;;;;
