@@ -213,6 +213,14 @@
              :action (fn []
                        (object/raise gibo :to-the-disks! (gitignore<- (:bos @gibo))))})
 
+(def undoer {:name "-"
+             :file nil
+             :action (fn []
+                       (do
+                         (object/update! gibo [:bos] disj (last (:bos @gibo)))
+                         (notifos/set-msg! (apply str "Gibo: "
+                                                       (interpose ", " (map :name (:bos @gibo)))))))})
+
 (defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature. Also a bad *light* table pun.
   (let [lst (object/create ::gibo-list opts)]
     (object/raise lst :refresh!)
@@ -235,7 +243,7 @@
                             lis]])))
 
 (def gibo-list (make-gibolite {:items (when (git? (gh-local repo))
-                                              (conj (->bo (local-bos (gh-local repo))) writer reviewer))
+                                              (conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
                                :key :name
                                :placeholder "Boilerplates"}))
 
@@ -260,8 +268,8 @@
           :triggers #{:force-refresh!}
           :reaction (fn [this]
                       (do
-                        (object/update! this [:items] conj (conj (->bo (local-bos (gh-local repo))) writer reviewer))
-                        (object/raise this :refresh!))))
+                        (object/update! this [:items] conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
+                        (object/raise this :refresh!)))
 
 
 ;;;; user-reachable commands ;;;;
