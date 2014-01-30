@@ -1,4 +1,4 @@
-(defproject light-gibo "0.1.1"
+(defproject light-gibo "0.2.0"
   :description "gitignore boilerplates plugin for Light Table"
   :url "http://github.com/ndr-qef/light-gibo"
 
