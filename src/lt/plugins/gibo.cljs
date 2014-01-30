@@ -268,8 +268,8 @@
           :triggers #{:force-refresh!}
           :reaction (fn [this]
                       (do
-                        (object/update! this [:items] conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
-                        (object/raise this :refresh!)))
+                        (object/update! this [:items] #(conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
+                        (object/raise this :refresh!))))
 
 
 ;;;; user-reachable commands ;;;;
