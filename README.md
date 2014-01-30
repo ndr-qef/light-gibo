@@ -7,7 +7,7 @@ light-gibo is, of course, a port of the eponymous [gibo](https://github.com/simo
 Launch gibo from the command bar:
 
 `^SPACE`
-`gibo: new .gitignore`
+`Gibo: new gitignore`
 
 Select the boilerplates you wish to add to your local .gitignore:
 
@@ -15,9 +15,13 @@ Select the boilerplates you wish to add to your local .gitignore:
 `Java`
 `…`
 
+If you make a mistake:
+
+`-` to remove the latest boilerplate
+
 Finally:
-- `Write` to save the selected boilerplates to (top workspace folder)/.gitignore
-- `Review` to open the current `gibo` buffer in a new tab.
+- `Gibo: Write` to save the selected boilerplates to (top workspace folder)/.gitignore
+- `Gibo: Review` to open the current `gibo` buffer in a new tab.
 
 
 ## Boilerplate repositories
