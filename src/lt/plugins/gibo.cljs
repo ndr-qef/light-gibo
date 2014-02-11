@@ -42,18 +42,6 @@
 (defn gh-local [r]
   (peek (:gh-local @r)))
 
-(defn append [path content & [cb]]
-  (try
-    (.appendFileSync nfs path content)
-    (object/raise fs/files-obj :files.save path)
-    (when cb (cb))
-    (catch js/global.Error e
-      (object/raise fs/files-obj :files.save.error path e)
-      (when cb (cb e)))
-    (catch js/Error e
-      (object/raise fs/files-obj :files.save.error path e)
-      (when cb (cb e)))))
-
 
 ;;;; gibos reading and processing ;;;;
 
@@ -166,8 +154,7 @@
 (behavior ::review!
           :triggers #{:to-the-tabs!}
           :reaction (fn [this content]
-                      (let [last (pool/last-active)
-                            info {:mime "plaintext"
+                      (let [info {:mime "plaintext"
                                   :tags [:editor.plaintext]
                                   :name ".gitignore"
                                   :content content}
@@ -188,7 +175,7 @@
                       (if-let [p (pwd)]
                         (do
                           (notifos/working "Saving gibos…")
-                          (append (gitignore-at p)
+                          (fs/append (gitignore-at p)
                                   (if (fs/exists? (gitignore-at p))
                                     (str "\n\n" content)
                                     content)
@@ -245,7 +232,7 @@
 (def gibo-list (make-gibolite {:items (when (git? (gh-local repo))
                                               (conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
                                :key :name
-                               :placeholder "Boilerplates"}))
+                               :placeholder "search boilerplates"}))
 
 (behavior ::bo->buffer
           :triggers #{:select}
