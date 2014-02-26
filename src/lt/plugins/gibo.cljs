@@ -4,11 +4,11 @@
             [lt.objs.sidebar.command :as scmd]
             [lt.objs.files           :as fs]
             [lt.objs.workspace       :as ws]
-            [lt.objs.sidebar         :as sb]
             [lt.objs.editor.pool     :as pool]
             [lt.objs.tabs            :as tabs]
             [lt.objs.proc            :as proc]
             [lt.objs.notifos         :as notifos]
+            [lt.objs.popup           :as popup]
             [clojure.string          :as string])
   (:require-macros [lt.macros :refer [behavior]]))
 
@@ -39,9 +39,6 @@
 (defn gitignore-at [p]
   (fs/join p ".gitignore"))
 
-(defn gh-local [r]
-  (peek (:gh-local @r)))
-
 
 ;;;; gibos reading and processing ;;;;
 
@@ -66,11 +63,19 @@
 
 ;;;; git processes and notifications ;;;;
 
+(defn prompt->clone? [this]
+  (popup/popup! {:header "Gitignore boilerplates not found."
+                 :body "To use gibo, you need a local copy of github/gitignore. Clone it now?"
+                 :buttons [{:label "Clone github/gitignore"
+                            :action (fn []
+                                      (object/raise this :create! (:gh-local @this)))}
+                           popup/cancel-button]}))
+
 (behavior ::clone-gh!
           :triggers #{:create!}
           :reaction (fn [this local]
                       (do
-                        (notifos/working (str "Gitignore boilerplates not found; cloning into " local))
+                        (notifos/working (str "Cloning into " local))
                         (proc/exec {:command "git"
                                     :args ["clone" gh-remote local]
                                     :cwd (pwd)
@@ -79,15 +84,15 @@
 (behavior ::pull-gh!
           :triggers #{:update!}
           :reaction (fn [this]
-                      (if (git? (gh-local this))
+                      (if (git? (:gh-local @this))
                         (do
-                          (notifos/working (str "Updating " (gh-local this) " to latest github/gitignore"))
+                          (notifos/working (str "Updating " (:gh-local @this) " to latest github/gitignore"))
                           (proc/exec {:command "git"
                                       :args ["pull" "origin" "master"]
-                                      :cwd (gh-local this)
+                                      :cwd (:gh-local @this)
                                       :env nil
                                       :obj this}))
-                        (object/raise this :create! (gh-local this)))))
+                        (prompt->clone? this))))
 
 (behavior ::on-out
           :triggers #{:proc.out}
@@ -122,7 +127,7 @@
 
 (object/object* ::repo
                 :tags #{:gibo.repo}
-                :gh-local [gh-default]
+                :gh-local gh-default
                 :custom #{}             ; TODO: user-defined boilerplates
                 :init (fn[]))
 
@@ -136,8 +141,8 @@
           :type :user
           :reaction (fn [this custom]
                       (if custom
-                        (object/update! this [:gh-local] assoc 0 custom)
-                        (object/update! this [:gh-local] assoc 0 gh-default))))
+                        (reset! this (assoc-in @this [:gh-local] custom))
+                        (reset! this (assoc-in @this [:gh-local] gh-default)))))
 
 
 ;;;; let there be gibos ;;;;
@@ -208,7 +213,7 @@
                          (notifos/set-msg! (apply str "Gibo: "
                                                        (interpose ", " (map :name (:bos @gibo)))))))})
 
-(defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature. Also a bad *light* table pun.
+(defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature; also a bad *Light* Table pun.
   (let [lst (object/create ::gibo-list opts)]
     (object/raise lst :refresh!)
     lst))
@@ -229,8 +234,8 @@
                            [:ul
                             lis]])))
 
-(def gibo-list (make-gibolite {:items (when (git? (gh-local repo))
-                                              (conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
+(def gibo-list (make-gibolite {:items (when (git? (:gh-local @repo))
+                                              (conj (->bo (local-bos (:gh-local @repo))) undoer reviewer writer))
                                :key :name
                                :placeholder "search boilerplates"}))
 
@@ -246,16 +251,16 @@
                                                        (interpose ", " (map :name (:bos @gibo)))))))))
 
 (behavior ::repo-check
-          :triggers #{:active}
+          :triggers #{:focus!}
           :reaction (fn [this]
-                      (when-not (git? (gh-local repo))
-                        (object/raise repo :create! (gh-local repo)))))
+                      (when-not (git? (:gh-local @repo))
+                        (prompt->clone? repo))))
 
 (behavior ::refresh
           :triggers #{:force-refresh!}
           :reaction (fn [this]
                       (do
-                        (object/update! this [:items] #(conj (->bo (local-bos (gh-local repo))) undoer reviewer writer))
+                        (object/update! this [:items] #(conj (->bo (local-bos (:gh-local @repo))) undoer reviewer writer))
                         (object/raise this :refresh!))))
 
 
