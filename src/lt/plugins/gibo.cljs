@@ -13,7 +13,6 @@
   (:require-macros [lt.macros :refer [behavior]]))
 
 (def path (js/require "path"))
-(def nfs  (js/require "fs"))
 
 (def gh-default (fs/join (fs/home) ".gitignore-boilerplates"))
 (def gh-remote "https://github.com/github/gitignore.git")
@@ -26,9 +25,7 @@
   (first (:folders @ws/current-ws)))
 
 (defn bo-name [f]
-  ;; This will be update to files/basename when commit be4ba8e is included in
-  ;; release version of Light Table.
-  (.basename path f ".gitignore"))
+  (fs/basename f ".gitignore"))
 
 (defn gitignore? [f]
   (= (.extname path f) ".gitignore"))
@@ -43,9 +40,18 @@
 ;;;; gibos reading and processing ;;;;
 
 (defn local-bos [r]
-  (sort-by bo-name (filter gitignore?
-                           (concat (fs/full-path-ls r)
-                                   (fs/full-path-ls (fs/join r "Global"))))))
+  (sort-by #(string/lower-case (bo-name %))
+           (filter gitignore? (repo-paths r))))
+
+(defn repo-paths [p]
+  (let [global (fn [_] (fs/join _ "Global"))]
+    (concat (->> (map fs/full-path-ls p)
+                 (apply concat))
+            (->> p
+                 (filter #(fs/dir? (global %)))
+                 (map #(global %))
+                 (map fs/full-path-ls)
+                 (apply concat)))))
 
 (defn ->bo [coll]
   (map #(hash-map :name (bo-name %)
@@ -235,7 +241,7 @@
                             lis]])))
 
 (def gibo-list (make-gibolite {:items (when (git? (:gh-local @repo))
-                                              (conj (->bo (local-bos (:gh-local @repo))) undoer reviewer writer))
+                                        (conj (->bo (local-bos (conj (:custom @repo) (:gh-local @repo)))) undoer reviewer writer))
                                :key :name
                                :placeholder "search boilerplates"}))
 
