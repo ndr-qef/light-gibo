@@ -143,17 +143,14 @@
                 :tags #{:gibo.repo}
                 :gh-local gh-default
                 :custom #{}
-                :init (fn[]))
-
-(def repo (object/create ::repo))
+                :init (fn [this]))
 
 (behavior ::set-gh-local
           :triggers #{:object.instant}
-          :for #{:gibo.repo}
           :desc "Gibo: set local github/gitignore repository"
+          :type :user
           :params [{:label "Absolute path"
                     :type :string}]
-          :type :user
           :reaction (fn [this custom]
                       (if custom
                         (object/merge! this {:gh-local custom})
@@ -161,15 +158,18 @@
 
 (behavior ::custom
           :triggers #{:object.instant}
-          :for #{:gibo.repo}
           :desc "Gibo: add custom local repositories"
+          :type :user
           :params [{:label "Absolute path"
                     :type :string}
                    {:label "& more"
                     :type :string}]
-          :type :user
           :reaction (fn [this & paths]
-                      (object/merge! this {:custom (set paths)})))
+                      (object/merge! this {:custom (set paths)})
+                      (when gibo-list
+                        (object/raise gibo-list :force-refresh!))))
+
+(def repo (object/create ::repo))
 
 
 ;;;; let there be gibos ;;;;
