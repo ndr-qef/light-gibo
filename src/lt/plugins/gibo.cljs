@@ -12,7 +12,6 @@
             [clojure.string          :as string])
   (:require-macros [lt.macros :refer [behavior]]))
 
-(def path (js/require "path"))
 
 (def gh-default (fs/join (fs/home) ".gitignore-boilerplates"))
 (def gh-remote "https://github.com/github/gitignore.git")
@@ -28,22 +27,22 @@
   (fs/basename f ".gitignore"))
 
 (defn gitignore? [f]
-  (= (.extname path f) ".gitignore"))
+  (= (fs/ext f) "gitignore"))
 
 (defn git? [p]
   (fs/exists? (fs/join p ".git")))
 
-(defn gitignore-at [p]
+(defn gitignore-in [p]
   (fs/join p ".gitignore"))
 
 
-;;;; gibos reading and processing ;;;;
+;;;; gibo reading and processing ;;;;
 
 (defn local-bos [r]
   (sort-by #(string/lower-case (bo-name %))
-           (filter gitignore? (repo-paths r))))
+           (filter gitignore? (repo-path-ls r))))
 
-(defn repo-paths [p]
+(defn repo-path-ls [p]
   (let [global (fn [_] (fs/join _ "Global"))]
     (concat (->> (map fs/full-path-ls p)
                  (apply concat))
@@ -143,7 +142,7 @@
 (object/object* ::repo
                 :tags #{:gibo.repo}
                 :gh-local gh-default
-                :custom #{}             ; TODO: user-defined boilerplates
+                :custom #{}
                 :init (fn[]))
 
 (def repo (object/create ::repo))
@@ -208,20 +207,20 @@
                       (if-let [p (pwd)]
                         (do
                           (notifos/working "Saving gibos…")
-                          (fs/append (gitignore-at p)
-                                  (if (fs/exists? (gitignore-at p))
+                          (fs/append (gitignore-in p)
+                                  (if (fs/exists? (gitignore-in p))
                                     (str "\n\n" content)
                                     content)
                                   (note-write p))
                           (object/update! this [:bos] empty)
                           (scmd/exec! :close-sidebar)
                           (object/raise gibo-list :escape! false))
-                        (object/raise gibo :to-the-tabs! content))))
+                        (object/raise this :to-the-tabs! content))))
 
 (def gibo (object/create ::gibo))
 
 
-;;;; list of boilerplates and associated behaviors ;;;;
+;;;; searchable gibo list ;;;;
 
 (def reviewer {:name "Gibo: Review"
                :file nil
@@ -241,7 +240,7 @@
                          (notifos/set-msg! (apply str "Gibo: "
                                                        (interpose ", " (map :name (:bos @gibo)))))))})
 
-(defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature; also a bad *Light* Table pun.
+(defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature; also, a bad *Light* Table pun.
   (let [lst (object/create ::gibo-list opts)]
     (object/raise lst :refresh!)
     lst))
@@ -254,8 +253,8 @@
                 :search ""
                 :init (fn [this opts]
                         (let [opts (merge {:size 100} opts)
-                              lis (for [x (range (:size opts))]
-                                    (scmd/item this x))]
+                              lis (for [i (range (:size opts))]
+                                    (scmd/item this i))]
                           (object/merge! this (merge {:lis (vec lis)} opts))
                           [:div.filter-list.empty
                            (scmd/input this)
