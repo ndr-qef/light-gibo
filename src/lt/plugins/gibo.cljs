@@ -53,6 +53,15 @@
                  (map fs/full-path-ls)
                  (apply concat)))))
 
+(defn repo->items [repo]
+  (let [custom (:custom @repo)
+        gh (:gh-local @repo)
+        all (conj custom gh)]
+    (conj (->bo (local-bos all))
+          undoer
+          reviewer
+          writer)))
+
 (defn ->bo [coll]
   (map #(hash-map :name (bo-name %)
                   :file %)
@@ -143,12 +152,25 @@
           :triggers #{:object.instant}
           :for #{:gibo.repo}
           :desc "Gibo: set local github/gitignore repository"
-          :params [{:label "Absolute path"}]
+          :params [{:label "Absolute path"
+                    :type :string}]
           :type :user
           :reaction (fn [this custom]
                       (if custom
-                        (reset! this (assoc-in @this [:gh-local] custom))
-                        (reset! this (assoc-in @this [:gh-local] gh-default)))))
+                        (object/merge! this {:gh-local custom})
+                        (object/merge! this {:gh-local gh-default}))))
+
+(behavior ::custom
+          :triggers #{:object.instant}
+          :for #{:gibo.repo}
+          :desc "Gibo: add custom local repositories"
+          :params [{:label "Absolute path"
+                    :type :string}
+                   {:label "& more"
+                    :type :string}]
+          :type :user
+          :reaction (fn [this & paths]
+                      (object/merge! this {:custom (set paths)})))
 
 
 ;;;; let there be gibos ;;;;
@@ -241,7 +263,7 @@
                             lis]])))
 
 (def gibo-list (make-gibolite {:items (when (git? (:gh-local @repo))
-                                        (conj (->bo (local-bos (conj (:custom @repo) (:gh-local @repo)))) undoer reviewer writer))
+                                        (repo->items repo))
                                :key :name
                                :placeholder "search boilerplates"}))
 
@@ -266,7 +288,7 @@
           :triggers #{:force-refresh!}
           :reaction (fn [this]
                       (do
-                        (object/update! this [:items] #(conj (->bo (local-bos (:gh-local @repo))) undoer reviewer writer))
+                        (object/merge! this {:items (repo->items repo)})
                         (object/raise this :refresh!))))
 
 
