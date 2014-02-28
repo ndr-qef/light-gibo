@@ -147,7 +147,7 @@
 
 (behavior ::set-gh-local
           :triggers #{:object.instant}
-          :desc "Gibo: set local github/gitignore repository"
+          :desc "gibo: set local github/gitignore repository"
           :type :user
           :params [{:label "Absolute path"
                     :type :string}]
@@ -158,7 +158,7 @@
 
 (behavior ::custom
           :triggers #{:object.instant}
-          :desc "Gibo: add custom local repositories"
+          :desc "gibo: add custom local repositories"
           :type :user
           :params [{:label "Absolute path"
                     :type :string}
@@ -222,12 +222,12 @@
 
 ;;;; searchable gibo list ;;;;
 
-(def reviewer {:name "Gibo: Review"
+(def reviewer {:name "gibo: Review"
                :file nil
                :action (fn []
                          (object/raise gibo :to-the-tabs! (gitignore<- (:bos @gibo))))})
 
-(def writer {:name "Gibo: Write"
+(def writer {:name "gibo: Write"
              :file nil
              :action (fn []
                        (object/raise gibo :to-the-disks! (gitignore<- (:bos @gibo))))})
@@ -237,7 +237,7 @@
              :action (fn []
                        (do
                          (object/update! gibo [:bos] disj (last (:bos @gibo)))
-                         (notifos/set-msg! (apply str "Gibo: "
+                         (notifos/set-msg! (apply str "gibo: "
                                                        (interpose ", " (map :name (:bos @gibo)))))))})
 
 (defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature; also, a bad *Light* Table pun.
@@ -274,7 +274,7 @@
                         (do
                           (object/raise this :clear!)
                           (object/update! gibo [:bos] conj coll)
-                          (notifos/set-msg! (apply str "Gibo: "
+                          (notifos/set-msg! (apply str "gibo: "
                                                        (interpose ", " (map :name (:bos @gibo)))))))))
 
 (behavior ::repo-check
@@ -294,10 +294,10 @@
 ;;;; user-reachable commands ;;;;
 
 (cmd/command {:command :gibo.new
-              :desc "Gibo: new gitignore"
+              :desc "gibo: new gitignore"
               :options gibo-list})
 
 (cmd/command {:command :gibo.update
-              :desc "Gibo: update boilerplates"
+              :desc "gibo: update boilerplates"
               :exec (fn[]
                       (object/raise repo :update!))})
