@@ -295,7 +295,8 @@
 
 (cmd/command {:command :gibo.new
               :desc "gibo: new gitignore"
-              :options gibo-list})
+              :options gibo-list
+              :exec (fn[])})
 
 (cmd/command {:command :gibo.update
               :desc "gibo: update boilerplates"
