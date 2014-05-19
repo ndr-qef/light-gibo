@@ -1,5 +1,5 @@
-(defproject light-gibo "0.3.0"
+(defproject light-gibo "0.3.1"
   :description "gitignore boilerplates plugin for Light Table"
   :url "http://github.com/ndr-qef/light-gibo"
 
-  :dependencies [[org.clojure/clojure "1.5.1"]])
+  :dependencies [[org.clojure/clojure "1.6.0"]])
