@@ -1,126 +1,33 @@
-(ns lt.plugins.gibo
-  (:require [lt.object               :as object]
-            [lt.objs.command         :as cmd]
-            [lt.objs.sidebar.command :as scmd]
-            [lt.objs.files           :as fs]
-            [lt.objs.workspace       :as ws]
-            [lt.objs.editor.pool     :as pool]
-            [lt.objs.tabs            :as tabs]
-            [lt.objs.proc            :as proc]
-            [lt.objs.notifos         :as notifos]
-            [lt.objs.popup           :as popup]
-            [clojure.string          :as string])
+ (ns lt.plugins.gibo
+  (:require [lt.plugins.gibo.files :as gf]
+            [lt.plugins.gibo.list  :as gl]
+            [lt.object             :as object]
+            [lt.objs.command       :as cmd]
+            [lt.objs.files         :as fs]
+            [lt.objs.notifos       :as notifos]
+            [lt.objs.opener        :as opener]
+            [lt.objs.proc          :as proc])
   (:require-macros [lt.macros :refer [behavior]]))
 
 
-(def gh-default (fs/join (fs/home) ".gitignore-boilerplates"))
-(def gh-remote "https://github.com/github/gitignore.git")
+(declare gibo)
 
 
-;;;; file and path helpers ;;;;
-
-(defn pwd []
-  "Returns the Presumably Working Directory."
-  (first (:folders @ws/current-ws)))
-
-(defn bo-name [f]
-  (fs/basename f ".gitignore"))
-
-(defn gitignore? [f]
-  (= (fs/ext f) "gitignore"))
-
-(defn git? [p]
-  (fs/exists? (fs/join p ".git")))
-
-(defn gitignore-in [p]
-  (fs/join p ".gitignore"))
-
-
-;;;; gibo reading and processing ;;;;
-
-(defn local-bos [r]
-  (sort-by #(string/lower-case (bo-name %))
-           (filter gitignore? (repo-path-ls r))))
-
-(defn repo-path-ls [p]
-  (let [global (fn [_] (fs/join _ "Global"))]
-    (concat (->> (map fs/full-path-ls p)
-                 (apply concat))
-            (->> p
-                 (filter #(fs/dir? (global %)))
-                 (map #(global %))
-                 (map fs/full-path-ls)
-                 (apply concat)))))
-
-(defn repo->items [repo]
-  (let [custom (:custom @repo)
-        gh (:gh-local @repo)
-        all (conj custom gh)]
-    (conj (->bo (local-bos all))
-          undoer
-          reviewer
-          writer)))
-
-(defn ->bo [coll]
-  (map #(hash-map :name (bo-name %)
-                  :file %)
-       coll))
-
-(defn ->content [coll]
-  (str "## " (:name coll)
-       " ##\n\n"
-       (fs/bomless-read (:file coll))))
-
-(defn gitignore<- [coll]
-  (string/join (interpose "\n\n" (map #(->content %) coll))))
-
-
-;;;; git processes and notifications ;;;;
-
-(defn prompt->clone? [this]
-  (popup/popup! {:header "Gitignore boilerplates not found."
-                 :body "To use gibo, you need a local copy of github/gitignore. Clone it now?"
-                 :buttons [{:label "Clone github/gitignore"
-                            :action (fn []
-                                      (object/raise this :create! (:gh-local @this)))}
-                           popup/cancel-button]}))
-
-(behavior ::clone-gh!
-          :triggers #{:create!}
-          :reaction (fn [this local]
-                      (do
-                        (notifos/working (str "Cloning into " local))
-                        (proc/exec {:command "git"
-                                    :args ["clone" gh-remote local]
-                                    :cwd (pwd)
-                                    :env nil
-                                    :obj this}))))
-(behavior ::pull-gh!
-          :triggers #{:update!}
-          :reaction (fn [this]
-                      (if (git? (:gh-local @this))
-                        (do
-                          (notifos/working (str "Updating " (:gh-local @this) " to latest github/gitignore"))
-                          (proc/exec {:command "git"
-                                      :args ["pull" "origin" "master"]
-                                      :cwd (:gh-local @this)
-                                      :env nil
-                                      :obj this}))
-                        (prompt->clone? this))))
+;;;; git processes and notification ;;;;
 
 (behavior ::on-out
           :triggers #{:proc.out}
           :reaction (fn[this data]
                       (let [out (str data)]
-                          (js/console.log out))))
+                          (println out))))
 
 (behavior ::on-exit
           :triggers #{:proc.exit}
           :reaction (fn [this data]
                       (let [out (str data)]
                         (case out
-                          "0" (do (notifos/done-working "Git operation successful.")
-                                  (object/raise gibo-list :force-refresh!))
+                          "0" (do (notifos/done-working "Git operation successful; refreshing .gitignore boilerplates.")
+                                  (object/raise (:selector @gibo) :force-refresh!))
                           "1" (do (notifos/done-working)
                                   (notifos/set-msg! "Git operation failed with exit code 1." {:class "error"}))
                           (do (notifos/done-working)
@@ -134,16 +41,13 @@
                         (do
                           (notifos/done-working)
                           (notifos/set-msg! "Git encountered an error; see console for details.")
-                          (js/console.log out)))))
+                          (println out)))))
 
 
 ;;;; repository manager ;;;;
 
-(object/object* ::repo
-                :tags #{:gibo.repo}
-                :gh-local gh-default
-                :custom #{}
-                :init (fn [this]))
+(def gh-default (fs/join (fs/home) ".gitignore-boilerplates"))
+(def gh-remote "https://github.com/github/gitignore.git")
 
 (behavior ::set-gh-local
           :triggers #{:object.instant}
@@ -151,9 +55,9 @@
           :type :user
           :params [{:label "Absolute path"
                     :type :string}]
-          :reaction (fn [this custom]
-                      (if custom
-                        (object/merge! this {:gh-local custom})
+          :reaction (fn [this gh-custom]
+                      (if gh-custom
+                        (object/merge! this {:gh-local gh-custom})
                         (object/merge! this {:gh-local gh-default}))))
 
 (behavior ::custom
@@ -166,139 +70,176 @@
                     :type :string}]
           :reaction (fn [this & paths]
                       (object/merge! this {:custom (set paths)})
-                      (when gibo-list
-                        (object/raise gibo-list :force-refresh!))))
+                      (when-let [selector (:selector @gibo)]
+                        (object/raise selector :force-refresh!))))
 
-(def repo (object/create ::repo))
+(behavior ::prompt-for-clone
+          :triggers #{:clone?}
+          :reaction (fn [this]
+                      (popup/popup! {:header "Gitignore boilerplates not found."
+                                     :body "To use gibo, you need a local copy of github/gitignore. Clone it now?"
+                                     :buttons [{:label "Clone github/gitignore"
+                                                :action (fn []
+                                                          (object/raise this :create! (:gh-local @this)))}
+                                               popup/cancel-button]})))
 
-
-;;;; let there be gibos ;;;;
-
-(defn note-write [p]
-  (notifos/done-working (str ".gitignore saved at " p))
-  nil)
-
-(object/object* ::gibo
-                :tags #{:gibo}
-                :bos #{}
-                :init (fn[]))
-
-(behavior ::review!
-          :triggers #{:to-the-tabs!}
-          :reaction (fn [this content]
-                      (let [info {:mime "plaintext"
-                                  :tags [:editor.plaintext]
-                                  :name ".gitignore"
-                                  :content content}
-                            ed (pool/create info)
-                            dirty? (seq content)]
-                        (object/add-tags ed [:editor.transient])
-                        (object/merge! ed {:dirty dirty?})
-                        (object/raise this :open ed)
-                        (tabs/add! ed)
-                        (tabs/active! ed)
-                        (object/update! this [:bos] empty)
-                        (scmd/exec! :close-sidebar)
-                        (object/raise gibo-list :escape! false))))
-
-(behavior ::write!
-          :triggers #{:to-the-disks!}
-          :reaction (fn [this content]
-                      (if-let [p (pwd)]
+(behavior ::clone-gh!
+          :triggers #{:create!}
+          :reaction (fn [this local]
+                      (notifos/working (str "Cloning into " local))
+                      (proc/exec {:command "git"
+                                  :args ["clone" gh-remote local]
+                                  :cwd (gf/pwd)
+                                  :env nil
+                                  :obj this})))
+(behavior ::pull-gh!
+          :triggers #{:update!}
+          :reaction (fn [this]
+                      (if (gf/git? (:gh-local @this))
                         (do
-                          (notifos/working "Saving gibos…")
-                          (fs/append (gitignore-in p)
-                                  (if (fs/exists? (gitignore-in p))
-                                    (str "\n\n" content)
-                                    content)
-                                  (note-write p))
-                          (object/update! this [:bos] empty)
-                          (scmd/exec! :close-sidebar)
-                          (object/raise gibo-list :escape! false))
-                        (object/raise this :to-the-tabs! content))))
+                          (notifos/working (str "Updating " (:gh-local @this) " to latest github/gitignore"))
+                          (proc/exec {:command "git"
+                                      :args ["pull" "origin" "master"]
+                                      :cwd (:gh-local @this)
+                                      :env nil
+                                      :obj this}))
+                        (object/raise this :clone?))))
 
-(def gibo (object/create ::gibo))
+(object/object* ::repo
+                :tags #{:gibo-repo}
+                :gh-local gh-default
+                :custom #{}
+                :init (fn [this]))
 
 
-;;;; searchable gibo list ;;;;
+;;;; filter-list ;;;;
+
+;;; items
 
 (def reviewer {:name "gibo: Review"
-               :file nil
                :action (fn []
-                         (object/raise gibo :to-the-tabs! (gitignore<- (:bos @gibo))))})
+                         (object/raise gibo :review!))})
 
 (def writer {:name "gibo: Write"
-             :file nil
              :action (fn []
-                       (object/raise gibo :to-the-disks! (gitignore<- (:bos @gibo))))})
+                       (object/raise gibo :write!))})
 
 (def undoer {:name "-"
-             :file nil
              :action (fn []
-                       (do
-                         (object/update! gibo [:bos] disj (last (:bos @gibo)))
-                         (notifos/set-msg! (apply str "gibo: "
-                                                       (interpose ", " (map :name (:bos @gibo)))))))})
+                       (object/raise gibo :remove!))})
 
-(defn make-gibolite [opts]      ;; gibolite: granular sedimentary rock of a giboic nature; also, a bad *Light* Table pun.
-  (let [lst (object/create ::gibo-list opts)]
-    (object/raise lst :refresh!)
-    lst))
+(def action-items [writer reviewer undoer])
 
-(object/object* ::gibo-list
-                :tags #{:filter-list :gibo.list}
-                :selected 0
-                :placeholder "search"
-                :items []
-                :search ""
-                :init (fn [this opts]
-                        (let [opts (merge {:size 100} opts)
-                              lis (for [i (range (:size opts))]
-                                    (scmd/item this i))]
-                          (object/merge! this (merge {:lis (vec lis)} opts))
-                          [:div.filter-list.empty
-                           (scmd/input this)
-                           [:ul
-                            lis]])))
+;;; behaviors and definition
 
-(def gibo-list (make-gibolite {:items (when (git? (:gh-local @repo))
-                                        (repo->items repo))
-                               :key :name
-                               :placeholder "search boilerplates"}))
-
-(behavior ::bo->buffer
+(behavior ::add-boilerplate
           :triggers #{:select}
-          :reaction (fn [this coll]
-                      (if-let [f (:action coll)]
+          :reaction (fn [this item]
+                      (if-let [f (:action item)]
                         (f)
                         (do
                           (object/raise this :clear!)
-                          (object/update! gibo [:bos] conj coll)
-                          (notifos/set-msg! (apply str "gibo: "
-                                                       (interpose ", " (map :name (:bos @gibo)))))))))
+                          (object/raise gibo :add! item)))))
 
 (behavior ::repo-check
           :triggers #{:focus!}
           :reaction (fn [this]
-                      (when-not (git? (:gh-local @repo))
-                        (prompt->clone? repo))))
+                      (let [local-repo (:repo @gibo)]
+                        (when-not (gf/git? (:gh-local @local-repo))
+                          (object/raise local-repo :clone?)))))
 
 (behavior ::refresh
           :triggers #{:force-refresh!}
           :reaction (fn [this]
-                      (do
-                        (object/merge! this {:items (repo->items repo)})
-                        (object/raise this :refresh!))))
+                      (object/merge! this {:items (gl/enlist (:repo @gibo) action-items)})
+                      (object/raise this :refresh!)))
+
+
+;;;; let there be gibo ;;;;
+
+;;; object and behaviors
+
+(behavior ::add!
+          :triggers #{:add!}
+          :reaction (fn [this bo]
+                      (object/update! this [:bos] conj bo)
+                      (object/raise this :display-buffer)))
+
+(behavior ::remove!
+          :triggers #{:remove!}
+          :reaction (fn [this]
+                      (let [last-added (last (:bos @this))]
+                        (object/update! this [:bos] disj last-added))
+                      (object/raise this :display-buffer)))
+
+(behavior ::review!
+          :triggers #{:review!}
+          :reaction (fn [this]
+                      (let [content (gf/gitignore<- (:bos @this))
+                            info {:mime "plaintext"
+                                  :tags [:editor.plaintext :editor.transient]
+                                  :name ".gitignore"
+                                  :content content}
+                            selector (:selector @this)]
+                        (object/raise opener/opener :open-info! info)
+                        (object/update! this [:bos] empty)
+                        (cmd/exec! :close-sidebar)
+                        (object/raise selector :escape! false))))
+
+(defn notify-of-save [path]
+  (notifos/done-working (str ".gitignore saved at " path))
+  nil)
+
+(defn prepend-blank-lines? [path content]
+  (if (fs/exists? (gf/gitignore-at path))
+    (str "\n\n" content)
+    content))
+
+(behavior ::write!
+          :triggers #{:write!}
+          :reaction (fn [this]
+                      (let [content (gf/gitignore<- (:bos @this))
+                            selector (:selector @this)]
+                        (if-let [path (gf/pwd)]
+                          (do (notifos/working "Saving .gitignore…")
+                            (fs/append (gf/gitignore-at path)
+                                       (prepend-blank-lines? path content)
+                                       (notify-of-save path))
+                            (object/update! this [:bos] empty)
+                            (cmd/exec! :close-sidebar)
+                            (object/raise selector :escape! false))
+                          (object/raise this :review!)))))
+
+(behavior ::display-buffer
+          :triggers #{:display-buffer}
+          :reaction (fn [this]
+                      (let [bo-names (map :name (:bos @this))]
+                        (notifos/set-msg! (apply str "gibo: "
+                                                 (interpose ", " bo-names))))))
+
+(object/object* ::gibo
+                :tags #{:gibo}
+                :bos #{}
+                :selector nil
+                :repo nil
+                :init (fn [this]
+                        (let [repo (object/create ::repo)
+                              gibo-flist (gl/create {:items (gl/enlist repo action-items)
+                                                     :key :name})]
+                          (object/merge! this {:repo repo})
+                          (object/merge! this {:selector gibo-flist}))))
+
+(def gibo (object/create ::gibo))
 
 
 ;;;; user-reachable commands ;;;;
 
 (cmd/command {:command :gibo.new
               :desc "gibo: new gitignore"
-              :options gibo-list
-              :exec (fn[])})
+              :options (:selector @gibo)
+              :exec (fn [coll])})
 
 (cmd/command {:command :gibo.update
               :desc "gibo: update boilerplates"
               :exec (fn[]
-                      (object/raise repo :update!))})
+                      (object/raise (:repo @gibo) :update!))})
